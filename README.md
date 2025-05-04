@@ -1,30 +1,42 @@
-AceToTV
+# AceToTV
 
-It allows you to stream AceStream sources to supported devices (e.g. Smart TVs, Consoles, Android TV) over your local network using UDP.
+**Created by:** Brooks_EU  
+**Year:** 2025  
+**License:** MIT
+
+## Description
+
+AceToTV is a lightweight Windows application that allows you to stream AceStream sources directly to DLNA-compatible devices like Smart TVs, Android TV boxes, or gaming consoles using UDP via FFmpeg.  
+The application detects devices in your local network, allows selection, and handles streaming configuration with minimal setup.
 
 ---
 
-Prerequisites
+## Prerequisites
 
-To run AceToTV, the following components must be installed on your system:
+Before running AceToTV, please ensure the following components are installed or placed in the same folder as the executable:
 
-- .NET Framework 4.8  
-  [Download from Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48)
+- **.NET Framework 4.8**  
+  Download: [https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48)
 
-- Ace Stream Engine for Windows 
-  [Download from AceStream](https://acestream.org/#download)
+- **AceStream Engine for Windows**  
+  Download: [https://acestream.org/downloads/windows](https://acestream.org/downloads/windows)
 
-- FFmpeg 
-  [Download FFmpeg for Windows] (https://www.ffmpeg.org/download.html)
+- **FFmpeg**  
+  Download (Windows build): [https://www.gyan.dev/ffmpeg/builds/](https://www.gyan.dev/ffmpeg/builds/)  
+  → Place `ffmpeg.exe` in the same folder as AceToTV.exe or ensure it is in your system `PATH`.
 
-Make sure that `ffmpeg.exe` is placed in the same folder as `AceToTV.exe`, or is globally available via your system's `PATH`.
+---
 
+## Usage
 
+1. Click **"Scan"** to search for supported devices on your network.
+2. Select a target device from the dropdown.
+3. Enter a valid **AceStream ID**.
+4. Click **"Start Stream"** to begin.
+5. Use **"Stop Stream"** to terminate the stream and background processes.
 
-Features
+---
 
-- Automatic network device scan (Smart TVs, Consoles, etc.)
-- Simple UI with clear streaming steps
-- UDP stream forwarding via FFmpeg
-- Optional auto-start of AceStream Engine
-- Progress and status output with bitrate display (TBD)
+## License
+
+This project is licensed under the MIT License.
