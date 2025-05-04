@@ -1,14 +1,16 @@
 using System;
-using System.Net;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using System.Windows;
+using Microsoft.Win32;
 using System.Windows.Controls;
 
 namespace AceStreamStreamer
@@ -18,7 +20,11 @@ namespace AceStreamStreamer
         private CancellationTokenSource scanCancellation;
         private Dictionary<string, string> deviceMap = new Dictionary<string, string>();
         private Process ffmpegProcess;
+        private Process aceProcess;
 
+        private bool isFfmpegAvailable = false;
+        private bool isAceAvailable = false;
+        
         public MainWindow()
         {
             InitializeComponent();
@@ -26,13 +32,32 @@ namespace AceStreamStreamer
             StopScanButton.Click += StopScanButton_Click;
             StartButton.Click += StartButton_Click;
             StopButton.Click += StopButton_Click;
+            DeviceComboBox.SelectionChanged += DeviceComboBox_SelectionChanged;
+
             CheckFfmpegPresence();
+            CheckAceEnginePresence();
+            UpdateStartButtonState();
         }
 
         private void CheckFfmpegPresence()
         {
-            var found = File.Exists("ffmpeg.exe") || !string.IsNullOrEmpty(FindInPath("ffmpeg"));
-            AppendStatus(found ? "FFmpeg found." : "FFmpeg not found. Please install or place ffmpeg.exe in app directory.");
+            isFfmpegAvailable = File.Exists("ffmpeg.exe") || !string.IsNullOrEmpty(FindInPath("ffmpeg"));
+            FfmpegStatusDot.Fill = isFfmpegAvailable ? Brushes.LimeGreen : Brushes.Red;
+            UpdateStartButtonState();
+        }
+
+        private void CheckAceEnginePresence()
+        {
+            string acePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ACEStream", "engine", "ace_engine.exe");
+            isAceAvailable = File.Exists(acePath);
+            AceStatusDot.Fill = isAceAvailable ? Brushes.LimeGreen : Brushes.Red;
+            UpdateStartButtonState();
+        }
+
+        private string GetAceEnginePath()
+        {
+            string userRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return Path.Combine(userRoaming, "ACEStream", "engine", "ace_engine.exe");
         }
 
         private string FindInPath(string exe)
@@ -51,14 +76,26 @@ namespace AceStreamStreamer
             DeviceComboBox.Items.Clear();
             deviceMap.Clear();
             scanCancellation = new CancellationTokenSource();
+
+            string localIp = GetLocalIPAddress();
+            if (string.IsNullOrEmpty(localIp))
+            {
+                AppendStatus("Could not determine local IP address.");
+                return;
+            }
+
+            string subnet = string.Join(".", localIp.Split('.').Take(3));
+            AppendStatus($"Scanning subnet: {subnet}.x");
+
             for (int i = 1; i <= 254; i++)
             {
                 if (scanCancellation.Token.IsCancellationRequested) break;
-                string ip = $"192.168.2.{i}";
+                string ip = $"{subnet}.{i}";
                 _ = Task.Run(() => PingHost(ip));
                 ScanProgressBar.Value = i * 100 / 254;
                 await Task.Delay(15);
             }
+
             AppendStatus("Scan complete.");
         }
 
@@ -99,6 +136,10 @@ namespace AceStreamStreamer
             string id = AceIdTextBox.Text.Trim();
 
             string args = $"-re -i http://127.0.0.1:6878/ace/getstream?id={id} -c copy -f mpegts udp://{ip}:1234";
+
+            StartAceEngine();
+            await Task.Delay(5000);
+
             ffmpegProcess = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -111,8 +152,6 @@ namespace AceStreamStreamer
                 }
             };
 
-            StartAceEngine();
-            await Task.Delay(5000);
             ffmpegProcess.Start();
             ffmpegProcess.BeginErrorReadLine();
             AppendStatus("FFmpeg streaming started.");
@@ -139,7 +178,6 @@ namespace AceStreamStreamer
                 }
                 else
                 {
-                    // Falls aceProcess null ist (weil extern gestartet), trotzdem beenden:
                     foreach (var proc in Process.GetProcessesByName("ace_engine"))
                     {
                         try
@@ -161,30 +199,35 @@ namespace AceStreamStreamer
             }
         }
 
-        private Process aceProcess;
-
         private void StartAceEngine()
         {
             try
             {
-                // Prüfen, ob bereits eine Instanz läuft
-                if (Process.GetProcessesByName("ace_engine").Length > 0)
-                {
-                    AppendStatus("AceStream Engine is already running.");
-                    return;
-                }
-
-                // Pfad zur AceStream Engine ermitteln
-                string userRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string acePath = Path.Combine(userRoaming, "ACEStream", "engine", "ace_engine.exe");
+                string acePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ACEStream", "engine", "ace_engine.exe");
 
                 if (!File.Exists(acePath))
                 {
-                    AppendStatus("AceStream Engine not found at expected location.");
+                    AppendStatus("AceStream Engine not found.");
                     return;
                 }
 
-                // Prozess starten
+                // Beende eventuell laufende Prozesse
+                foreach (var proc in Process.GetProcessesByName("ace_engine"))
+                {
+                    try
+                    {
+                        proc.Kill();
+                        proc.WaitForExit();
+                        AppendStatus("Existing AceEngine instance terminated.");
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendStatus($"Failed to kill existing AceEngine: {ex.Message}");
+                    }
+                }
+
+                Task.Delay(3000).Wait(); // Wartezeit von 3 Sekunden
+
                 aceProcess = new Process
                 {
                     StartInfo = new ProcessStartInfo
@@ -195,7 +238,6 @@ namespace AceStreamStreamer
                         CreateNoWindow = true
                     }
                 };
-
                 aceProcess.Start();
                 AppendStatus("AceStream Engine started.");
             }
@@ -203,6 +245,17 @@ namespace AceStreamStreamer
             {
                 AppendStatus($"Error starting AceStream Engine: {ex.Message}");
             }
+        }
+
+        private void UpdateStartButtonState()
+        {
+            StartButton.IsEnabled = isFfmpegAvailable && isAceAvailable && DeviceComboBox.SelectedItem != null;
+        }
+
+        private void DeviceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            DeviceStatusDot.Fill = DeviceComboBox.SelectedItem != null ? Brushes.LimeGreen : Brushes.Red;
+            UpdateStartButtonState();
         }
 
         private void AppendStatus(string message)
@@ -214,8 +267,21 @@ namespace AceStreamStreamer
             });
         }
 
+        private string GetLocalIPAddress()
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    continue;
 
+                var ipProps = ni.GetIPProperties();
+                foreach (var ua in ipProps.UnicastAddresses)
+                {
+                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
+                        return ua.Address.ToString();
+                }
+            }
+            return null;
+        }
     }
-
-
 }
