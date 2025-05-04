@@ -12,6 +12,8 @@ using System.Windows.Media;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Controls;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 namespace AceStreamStreamer
 {
@@ -24,6 +26,8 @@ namespace AceStreamStreamer
 
         private bool isFfmpegAvailable = false;
         private bool isAceAvailable = false;
+        private DispatcherTimer streamBlinkTimer;
+        private bool isStreamBlinkOn = false;
         
         public MainWindow()
         {
@@ -37,6 +41,7 @@ namespace AceStreamStreamer
             CheckFfmpegPresence();
             CheckAceEnginePresence();
             UpdateStartButtonState();
+            
         }
 
         private void CheckFfmpegPresence()
@@ -155,6 +160,7 @@ namespace AceStreamStreamer
             ffmpegProcess.Start();
             ffmpegProcess.BeginErrorReadLine();
             AppendStatus("FFmpeg streaming started.");
+            StartStreamBlinking();
         }
 
         private void StopButton_Click(object sender, RoutedEventArgs e)
@@ -192,6 +198,8 @@ namespace AceStreamStreamer
                         }
                     }
                 }
+                StopStreamBlinking();
+
             }
             catch (Exception ex)
             {
@@ -283,5 +291,31 @@ namespace AceStreamStreamer
             }
             return null;
         }
+
+        private void StartStreamBlinking()
+        {
+            if (streamBlinkTimer == null)
+            {
+                streamBlinkTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(150)
+                };
+                streamBlinkTimer.Tick += (s, e) =>
+                {
+                    StreamStatusDot.Fill = isStreamBlinkOn ? Brushes.LimeGreen : Brushes.DarkGray;
+                    isStreamBlinkOn = !isStreamBlinkOn;
+                };
+            }
+            streamBlinkTimer.Start();
+            StreamStatusDot.Fill = Brushes.LimeGreen;
+        }
+
+        private void StopStreamBlinking()
+        {
+            streamBlinkTimer?.Stop();
+            StreamStatusDot.Fill = Brushes.DarkGray;
+            isStreamBlinkOn = false;
+        }
+
     }
 }
